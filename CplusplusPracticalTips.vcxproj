@@ -131,6 +131,7 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="interface.hpp" />
     <ClInclude Include="operator.hpp" />
   </ItemGroup>
   <ItemGroup>
