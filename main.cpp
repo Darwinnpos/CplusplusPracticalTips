@@ -3,12 +3,21 @@
 
 #include <iostream>
 #include "operator.hpp"
-
+#include "interface.hpp"
 using namespace boost::describe;
 
 int main()
 {
+	// 枚举测试
 	std::cout << e::a << "\n";
+
+	// 日期测试
+	uint32_t year = 2024;
+	uint32_t month = 4;
+	uint32_t day{ 24 };
+	data data(month(month), day(day), year(year));
+
+
 	std::cout << "Hello World!\n";
 }
 
