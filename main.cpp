@@ -2,10 +2,14 @@
 //
 
 #include <iostream>
+#include "operator.hpp"
+
+using namespace boost::describe;
 
 int main()
 {
-    std::cout << "Hello World!\n";
+	std::cout << e::a << "\n";
+	std::cout << "Hello World!\n";
 }
 
 // 运行程序: Ctrl + F5 或调试 >“开始执行(不调试)”菜单
