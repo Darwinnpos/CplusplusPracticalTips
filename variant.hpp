@@ -20,7 +20,7 @@ class A
 {
 public:
 	template <typename... Args>
-	static void Call(Args&&... args)
+	static void Input(Args&&... args)
 	{
 		((std::cout << args), ...) << std::endl;
 		std::cout << "A is call" << std::endl;
@@ -31,7 +31,7 @@ class B
 {
 public:
 	template <typename... Args>
-	static void Call(Args&&... args)
+	static void Input(Args&&... args)
 	{
 		((std::cout << args), ...) << std::endl;
 		std::cout << "B is call" << std::endl;
@@ -42,7 +42,7 @@ class C
 {
 public:
 	template <typename... Args>
-	static void Call(Args&&... args)
+	static void Input(Args&&... args)
 	{
 		((std::cout << args), ...) << std::endl;
 		std::cout << "C is call" << std::endl;
@@ -55,7 +55,7 @@ void Call(Args&&... args)
 {
 	std::variant<A, B, C> var;
 	var.emplace<C>();
-	std::visit( [&](auto arg) { decltype(arg)::Call(std::forward<Args>(args)...); }, var);
+	std::visit( [&]<typename T>(T) { T::Input(std::forward<Args>(args)...); }, var);
 }
 
 class Variant
