@@ -18,12 +18,27 @@
     <ClCompile Include="main.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="stl.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="operator.hpp">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="interface.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="template.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="enum.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="stl.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="variant.hpp">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

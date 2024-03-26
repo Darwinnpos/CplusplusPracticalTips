@@ -129,10 +129,15 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="stl.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="enum.hpp" />
     <ClInclude Include="interface.hpp" />
     <ClInclude Include="operator.hpp" />
+    <ClInclude Include="stl.hpp" />
+    <ClInclude Include="template.hpp" />
+    <ClInclude Include="variant.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

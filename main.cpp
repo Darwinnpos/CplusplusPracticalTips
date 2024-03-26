@@ -4,19 +4,21 @@
 #include <iostream>
 #include "operator.hpp"
 #include "interface.hpp"
+#include "variant.hpp"
 using namespace boost::describe;
 
 int main()
 {
 	// 枚举测试
-	std::cout << e::a << "\n";
+	//std::cout << e::a << "\n";
 
-	// 日期测试
-	uint32_t year = 2024;
-	uint32_t month = 4;
-	uint32_t day{ 24 };
-	data data(month(month), day(day), year(year));
-
+	//// 日期测试
+	//uint32_t year = 2024;
+	//uint32_t month = 4;
+	//uint32_t day{ 24 };
+	//data data(month(month), day(day), year(year));
+	int a = 1;
+	Call(a, 2, 3, 4, 5);
 
 	std::cout << "Hello World!\n";
 }
