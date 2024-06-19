@@ -21,10 +21,22 @@
     <ClCompile Include="operator.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="promise.hpp">
+      <Filter>头文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="operator.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="template2.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="conandata.yml">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>
