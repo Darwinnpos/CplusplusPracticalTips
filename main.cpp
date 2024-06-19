@@ -1,35 +1,176 @@
-﻿// CplusplusPracticalTips.cpp : 此文件包含 "main" 函数。程序执行将在此处开始并结束。
-//
-
+﻿
 #include <iostream>
-#include "operator.hpp"
-#include "interface.hpp"
-#include "variant.hpp"
-using namespace boost::describe;
+#include <utility>
+#include <functional>
 
-int main()
+#include <type_traits>
+#include <utility>
+#include <tuple>
+#include <utility>
+#include <type_traits>
+#include <concepts>
+
+
+template<typename T>
+struct input{ T& t; };
+
+template<typename T>
+struct output{ T& t; };
+
+template<template<typename> class U, typename T>
+struct is_instance_of : std::false_type {};
+
+template<template<typename> class U, typename T>
+struct is_instance_of<U, U<T>> : std::true_type {};
+
+template<typename T>
+concept wrapper = is_instance_of<input, T>::value || is_instance_of<output, T>::value;
+
+template<typename Tuple>
+struct tuples;
+
+template<typename... Args> //TODO
+struct tuples<std::tuple<Args...>>  { };
+
+template<typename Tuple>
+concept tuple_wrapper = tuples<Tuple>::value;
+
+template <class... _Types>
+auto inputs(_Types&&... _Args) { return std::make_tuple(input(_Args)...); }
+
+template<typename T>
+void print_element(const T& t)
 {
-	// 枚举测试
-	//std::cout << e::a << "\n";
-
-	//// 日期测试
-	//uint32_t year = 2024;
-	//uint32_t month = 4;
-	//uint32_t day{ 24 };
-	//data data(month(month), day(day), year(year));
-	int a = 1;
-	Call(a, 2, 3, 4, 5);
-
-	std::cout << "Hello World!\n";
+	std::cout << typeid(T).name() << ": " << t;
 }
 
-// 运行程序: Ctrl + F5 或调试 >“开始执行(不调试)”菜单
-// 调试程序: F5 或调试 >“开始调试”菜单
+template<typename T>
+void print_element(const input<T>& in)
+{
+	std::cout <<  in.t;
+}
 
-// 入门使用技巧: 
-//   1. 使用解决方案资源管理器窗口添加/管理文件
-//   2. 使用团队资源管理器窗口连接到源代码管理
-//   3. 使用输出窗口查看生成输出和其他消息
-//   4. 使用错误列表窗口查看错误
-//   5. 转到“项目”>“添加新项”以创建新的代码文件，或转到“项目”>“添加现有项”以将现有代码文件添加到项目
-//   6. 将来，若要再次打开此项目，请转到“文件”>“打开”>“项目”并选择 .sln 文件
+template<typename T>
+void print_element(const output<T>& out)
+{
+	std::cout <<  out.t;
+}
+
+
+
+class stream_object
+{
+public:
+	stream_object(size_t) {
+		// malloc the memory 
+
+	};
+};
+
+
+class frame
+{
+public:
+	
+};
+
+template<typename... Ts>
+void deserialize(std::tuple<Ts...>& theTuple)
+{
+	std::cout << "deserialize:";
+	std::apply([](const Ts&... args) {
+		std::size_t n = 0;
+		((std::cout << (n++ ? ", " : "") << typeid(args).name() << ": ", print_element(args)), ...);
+		}, theTuple);
+	std::cout << std::endl;
+}
+
+
+template<typename... Ts>
+void serialize(std::tuple<Ts...>& theTuple)
+{
+	// try malloc the shared memory
+
+	std::cout << "serialize:";
+	std::apply([](const Ts&... args) {
+		std::size_t n = 0;
+		((std::cout << (n++ ? ", " : "") << typeid(args).name() << ": ", print_element(args)), ...);
+		}, theTuple);
+	std::cout << std::endl;
+}
+
+using execute = std::function<void()>;
+
+// 参数执行器
+class tls_storer
+{
+public :
+	inline static thread_local execute serializer;
+	inline static thread_local execute deserializer;
+};
+
+
+// 参数收集器
+template<typename... Outputs, typename... Inputs>
+void collect(std::tuple<Inputs...>& inputs, std::tuple<Outputs...>& outputs)
+{	
+	tls_storer::serializer = [=] () mutable { serialize(inputs); };
+	tls_storer::deserializer = [=]() mutable { deserialize(outputs); };
+}	
+
+// 参数收集器
+template<typename... Outputs, typename... Inputs,typename First, typename... Rest>
+void collect(std::tuple<Inputs...>& inputs, std::tuple<Outputs...>& outputs, First&& first, Rest&&... rest)
+{	
+	if constexpr  (std::is_same_v<std::decay_t<First>, input<std::decay_t<decltype(first.t)>>>)
+	{	
+		auto inputs2 = std::tuple_cat(inputs, std::make_tuple(std::forward<First>(first)));
+		collect( inputs2, outputs, std::forward<Rest>(rest)...);
+	}	
+	else if constexpr (std::is_same_v<std::decay_t<First>, output<std::decay_t<decltype(first.t)>>>)
+	{		
+		auto outputs2 = std::tuple_cat(outputs, std::make_tuple(std::forward<First>(first)));
+		collect( inputs, outputs2, std::forward<Rest>(rest)...);
+	}
+}	
+
+void wait()
+{
+
+}
+
+// 主体逻辑执行器
+template<wrapper... Args>
+void rpc(Args&&... args)
+{		
+	std::tuple<> input;
+	std::tuple<> output;	
+	collect(input, output, std::forward<Args>(args)...);
+	tls_storer::serializer();
+	wait();
+	tls_storer::deserializer();
+}
+
+template<tuple_wrapper... Args>
+void rpc(Args&&... args)
+{
+	//std::tuple<> input;
+	//std::tuple<> output;
+	//collect(input, output, std::forward<Args>(args)...);
+	//serialize();
+	//deserialize();
+}
+
+int main() 
+{	
+	int a{ 1 };
+	double b{ 2 };
+	float c{ 3 };
+	bool d{ false };
+	
+	rpc(input(a), input(b), output(c), output(d));
+
+	//rpc(inputs(a, b), output(c), output(d));
+
+	return 0;
+}

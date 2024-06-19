@@ -21,6 +21,9 @@
     <ClCompile Include="stl.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="promise.hpp">
+      <Filter>头文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="operator.hpp">
@@ -41,6 +44,15 @@
     <ClInclude Include="variant.hpp">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="template2.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="conandata.yml">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
