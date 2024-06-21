@@ -2,16 +2,16 @@
 #include <iostream>
 #include <utility>
 #include <functional>
-
 #include <type_traits>
-#include <utility>
 #include <tuple>
-#include <utility>
-#include <type_traits>
 #include <concepts>
 #include <optional>
-#include <functional>
 #include <queue>
+
+#include <boost\lockfree\queue.hpp>
+
+template<typename T>
+using mq = boost::lockfree::queue<T>;
 
 // 参数包装器
 template<typename T>
@@ -72,12 +72,14 @@ public:
 	static size_t count(Args&&...args) {
 
 	}
-	template<typename ...Args>
-	static void save(char*, Args&&...args) {
-
+	template<typename ...Ts>
+	static void save(char* addr, const std::tuple<Ts...>& theTuple) {
+		
+		std::apply([](const Ts&... args) { 	}, theTuple);
 	}
-	template<typename ...Args>
-	static void load(char*, size_t size, Args&&...arg) {
+	template<typename ...Ts>
+	static void load(char*, size_t size, const std::tuple<Ts...>& theTuple) {
+
 
 	}
 };
@@ -92,7 +94,7 @@ public:
 };
 
 
-
+// 链式调用
 class malloc_chain
 {
 public:
@@ -124,20 +126,6 @@ public:
 	void wait() { }
 };
 
-template<typename T>
-class mq
-{
-public:
-	T pop()
-	{
-		return T();
-	}
-	void push(T&)
-	{
-
-	}
-};
-
 enum class terminal
 {
 	client,
@@ -148,11 +136,19 @@ template<terminal Terminal>
 class event_list
 {
 public:
-	event_list(size_t size) { }
+	event_list(size_t size)
+		:semaphore_array(size),
+		index_mq(size)
+	{ }
 
 	size_t allocte() {
-		thread_local size_t index{ index_mq.pop() };
-		return index;
+		auto init = [this] { 
+			size_t index;
+			index_mq.pop(index);
+			return index;
+		};
+		thread_local size_t tls_index{ init()};
+		return tls_index;
 	}
 
 private:
@@ -199,6 +195,10 @@ private:
 	event_list<Terminal> synchronize;
 };
 
+
+
+
+
 class managered_memory : public malloc_chain
 {
 public:
@@ -227,37 +227,57 @@ public:
 		first.set_next(second).set_next(last);
 	}
 
-	char* malloc(size_t size) {
+	char* malloc(size_t size) const {
 		
 		auto opt_prt = entrance.malloc(size);
 		if (opt_prt.has_value())return opt_prt.value();
 		throw std::runtime_error("shared memory malloc failed.");
 	}
 
-	std::tuple<char*, size_t> find() {
+	std::tuple<char*, size_t> find() const {
 		return { nullptr,0 };
 	}
 
-	static shared_memory& get() {
-		if (!instance) instance = new shared_memory();
-		return *instance;
-	}
-private:
-	inline static shared_memory* instance = nullptr;	
+private:	
 	tls_memory<Terminal> first;
 	managered_memory second;
 	file_transefer last;
 	malloc_chain& entrance;
 };
 
+template<terminal Terminal>
+class frame
+{
+public:
+	void trigger()
+	{
+
+	}
+
+
+	static frame& get()
+	{
+		if (!instance)instance = new frame();
+		return *instance;
+	}
+	shared_memory<Terminal>& memory_mng() 
+	{
+		return shd_memory;
+	}
+
+private:
+	inline static frame* instance;
+	shared_memory<Terminal> shd_memory;
+};
+
 class seriliasize
 {
 public:
-	template<typename... Ts>
-	static void to_parameters(const std::tuple<Ts...>& theTuple)
+	template<typename T, typename... Ts>
+	static void to_parameters(T& memory_mng, const std::tuple<Ts...>& theTuple)
 	{
-		auto [ptr, size] = shared_memory<terminal::client>::get().find();
-		yas::load(ptr, size, 0);
+		auto [ptr, size] = memory_mng.find();
+		yas::load(ptr, size, theTuple);
 
 		std::cout << "deserialize:";
 		
@@ -276,12 +296,12 @@ public:
 		return 0;
 	}
 
-	template<typename... Ts>
-	static void to_string(const std::tuple<Ts...>& theTuple)
+	template<typename T ,typename... Ts>
+	static void to_string(const T& memory_mng, const std::tuple<Ts...>& theTuple)
 	{
 		// try malloc the shared memory	
-		auto ptr = shared_memory<terminal::client>::get().malloc(count(theTuple));
-		yas::save(ptr, 0);
+		auto ptr = memory_mng.malloc(count(theTuple));
+		yas::save(ptr, theTuple);
 		std::cout << "serialize:";
 		std::apply([](const Ts&... args) {
 			std::size_t n = 0;
@@ -292,7 +312,8 @@ public:
 };
 
 
-struct params;
+class params;
+
 // 参数执行器
 struct execute
 {
@@ -304,13 +325,16 @@ struct execute
 	void params_bind(Args&&... args)
 	{
 		auto [inputs, outputs] = params::sort(std::forward<Args>(args)...);
-		write = [=]() { seriliasize::to_string(inputs); };
-		read = [=]() mutable { seriliasize::to_parameters(outputs); };
+		const auto& memory_mng = frame<terminal::client>::get().memory_mng();
+		write = [&,inputs]() { seriliasize::to_string(memory_mng, inputs); };
+		read = [&,outputs]() mutable { seriliasize::to_parameters(memory_mng, outputs); };
 	}
 
 	void wait_response()
 	{
-		 
+		 // 
+
+		//
 	}
 };
 
@@ -381,7 +405,6 @@ int main()
 	// 参数包装器应用实例
 	rpc(input(a), input(b), output(c), output(d), output(e), input(f)); //9 * 400  3600个手动编写的代码，或者400个耦合复杂逻辑的代码
 	
-	rpc(input(a), input(b), output(c), output(d), output(e), input(f)); 
 	//rpc(inputs(a, b), output(c), output(d));
 
 	return 0;
