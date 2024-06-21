@@ -11,7 +11,7 @@
 #include <concepts>
 #include <optional>
 #include <functional>
-
+#include <queue>
 
 // 参数包装器
 template<typename T>
@@ -134,6 +134,7 @@ public:
 	}
 	void push(T&)
 	{
+
 	}
 };
 
@@ -147,6 +148,8 @@ template<terminal Terminal>
 class event_list
 {
 public:
+	event_list(size_t size) { }
+
 	size_t allocte() {
 		thread_local size_t index{ index_mq.pop() };
 		return index;
@@ -161,6 +164,13 @@ private:
 class basic_shared_memory
 {
 public:
+	basic_shared_memory(size_t bytes)
+		:size(bytes),
+		addr(new char[bytes])
+	{
+		
+	}
+
 	char* get() { return addr; }
 
 private:
@@ -172,11 +182,17 @@ template<terminal Terminal>
 class tls_memory : public malloc_chain 
 {
 public:
+	tls_memory()
+		:memory_list(32, 4096),
+		synchronize(32)
+	{}
+
 	std::optional<char*> malloc_inner(size_t size) override {
 		auto index = synchronize.allocte();
 		if (size > capacity) return {};
 		return memory_list.at(size).get();
 	}
+
 private:
 	const size_t capacity{ 4096 };
 	std::vector<basic_shared_memory> memory_list;
@@ -238,7 +254,7 @@ class seriliasize
 {
 public:
 	template<typename... Ts>
-	static void to_parameters(std::tuple<Ts...>& theTuple)
+	static void to_parameters(const std::tuple<Ts...>& theTuple)
 	{
 		auto [ptr, size] = shared_memory<terminal::client>::get().find();
 		yas::load(ptr, size, 0);
@@ -289,11 +305,12 @@ struct execute
 	{
 		auto [inputs, outputs] = params::sort(std::forward<Args>(args)...);
 		write = [=]() { seriliasize::to_string(inputs); };
-		read = [=]() { seriliasize::to_parameters(outputs); };
+		read = [=]() mutable { seriliasize::to_parameters(outputs); };
 	}
+
 	void wait_response()
 	{
-
+		 
 	}
 };
 
