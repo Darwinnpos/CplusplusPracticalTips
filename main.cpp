@@ -112,28 +112,36 @@ struct memory_info
 	size_t index;
 };
 
+template<typename T>
+concept malloc_param = std::is_same_v<T, uint32_t>; /*|| requires(T t) {
+	{ t() } -> std::convertible_to<uint32_t>;}*/
+
 // 链式调用
-class malloc_chain
+class malloc_manager
 {
 public:
-	virtual malloc_chain& set_next(malloc_chain& _next) {
-		next.emplace(_next);
-		return *this;
-	};
-
 	virtual std::tuple<char*, memory_info> malloc_inner(size_t size) = 0;
 
+	virtual malloc_manager& set_next(malloc_manager& _next) {
+		next.emplace(_next);
+		return *this;
+	};	
+
+	memory_info get_tls_info() { return mem_info; };
+
 	std::tuple<char*, memory_info> malloc(size_t size)
-	{
-		if (const auto opt_ptr = malloc_inner(size); std::get<0>(opt_ptr))
-			return opt_ptr;
+	{		
+		if (const auto ptr_and_mem_info = malloc_inner(size); std::get<0>(ptr_and_mem_info)){
+			return ptr_and_mem_info;
+		}
 		if (next.has_value())
 			return next.value().get().malloc(size);
 		return {};
 	};
 
 protected:
-	std::optional<std::reference_wrapper<malloc_chain>> next;
+	std::optional<std::reference_wrapper<malloc_manager>> next;
+	inline static thread_local memory_info mem_info;
 };
 
 
@@ -169,7 +177,7 @@ public:
 			size_t index{0};
 			//index_mq.pop(index);
 			return index;
-			};
+		};
 		thread_local size_t tls_index{ init() };
 		return tls_index;
 	}
@@ -198,17 +206,8 @@ private:
 };
 
 
-
-
-
-
-constexpr uint32_t to_uint32(mem_type type) {
-	return static_cast<uint32_t>(type);
-}
-
-
 template<terminal Terminal>
-class tls_memory : public malloc_chain
+class tls_memory : public malloc_manager
 {
 public:
 	tls_memory()
@@ -218,36 +217,38 @@ public:
 
 	std::tuple<char*, memory_info> malloc_inner(size_t size) {
 		auto index = synchronize.allocte();
-		if (size > capacity) return { nullptr,{ {},{}} };
-		return { memory_list.at(size).get(), { mem_type::tls, index } };
+		if (size > capacity) return { nullptr,{} };
+		return { memory_list.at(size).get(), { mem_type::tls, index }};
 	}
+
+	char* get_synchronize_addr() { }
 
 private:
 	const size_t capacity{ 4096 };
 	std::vector<basic_shared_memory> memory_list;
-	event_list<Terminal> synchronize;
+	event_list<Terminal> synchronize;	
 };
 
 
 
 
 
-class managered_memory : public malloc_chain
+class managered_memory : public malloc_manager
 {
 public:
 	std::tuple<char*, memory_info> malloc_inner(size_t size) {
 
 
-		return { {},{} };
+		return { nullptr,{} };
 	}
 };
 
-class file_transefer : public malloc_chain
+class file_transefer : public malloc_manager
 {
 public:
 	std::tuple<char*, memory_info> malloc_inner(size_t size) {
 		// TODO 		
-		return { {},{} };
+		return { nullptr,{} };
 	}
 };
 
@@ -258,6 +259,7 @@ public:
 template<terminal Terminal>
 class shared_memory
 {
+	
 public:
 	shared_memory()
 		:entrance{ first }
@@ -265,11 +267,12 @@ public:
 		first.set_next(second).set_next(last);
 	}
 
-	std::tuple<char*, memory_info> malloc(size_t size) const {
 
-		auto ret = entrance.malloc(size);
-		if (std::get<0>(ret)) return ret;
-		throw std::runtime_error("shared memory malloc failed.");
+	char* malloc(size_t size) {		
+		auto [ptr, mem_info] =  entrance.malloc(size);
+		// 将信息写入共享内存
+		first.
+		return ptr;
 	}
 
 	std::tuple<char*, size_t> find(memory_info info) const {
@@ -280,7 +283,7 @@ private:
 	tls_memory<Terminal> first;
 	managered_memory second;
 	file_transefer last;
-	malloc_chain& entrance;
+	malloc_manager& entrance;
 };
 
 template<terminal Terminal>
@@ -308,60 +311,56 @@ private:
 	shared_memory<Terminal> shd_memory;
 };
 
-class seriliasize
+class seriliasize_buffer
 {
 public:
-	seriliasize(char* _addr, std::size_t _size) :addr(_addr), size(_size) {}
-	
+	explicit seriliasize_buffer(const char* _addr = nullptr, std::size_t _size = 0) :addr(_addr), len(_size) {}
+
 	template<typename T>
-	seriliasize& operator<<(T&& vv)
+	seriliasize_buffer& operator& (T&& vv) 
 	{
 		return *this;
 	}
 
 	template<typename T>
-	seriliasize& operator>>(T&& vv)
+	seriliasize_buffer& operator<<(T&& vv)
 	{
 		return *this;
 	}
 
-	template<typename T, typename... Ts>
-	static void to_parameters(T& memory_mng, const std::tuple<Ts...>& theTuple)
+	template<typename T>
+	seriliasize_buffer& operator>>(T&& vv)
 	{
-		memory_info s{};
-		auto [ptr, size] = memory_mng.find(s);
-		yas::load(ptr, size, theTuple);
-	}
+		return *this;
+	}	
 
-
-	template<typename... Ts>
-	static size_t count(const std::tuple<Ts...>& theTuple)
-	{
-		return 0;
-	}
-
-	template<typename T, typename... Ts>
-	static void to_string(const T& memory_mng, const std::tuple<Ts...>& theTuple)
-	{
-		auto [ptr, _] = memory_mng.malloc(count(theTuple));
-		yas::save(ptr, theTuple);
+	size_t size() const {
+		return len;
 	}
 
 private:
-	char* addr;
-	std::size_t size;
+	const char* addr;
+	const std::size_t len;
 };
 
 
 class params;
 
 
-
+template<typename T>
+concept malloc_fn_concept = requires (T t) {
+	{ t() } -> std::same_as<char*>;
+};
 
 template<size_t N>
 class execute
 {		
-	using fn = std::function<void()>;
+	using malloc_fn = std::function<char*()>;
+	using find_fn = std::function<std::tuple<char*, size_t>()>;
+	using write_fn = std::function<void(malloc_fn&&)>;
+	using count_fn = std::function<std::size_t()>;
+	using read_fn = std::function<void(char*,size_t)>;
+	
 public:
 	execute(const char(&_name)[N])
 		: name{ _name }
@@ -373,24 +372,28 @@ public:
 	template<typename... Ty1,typename... Ty2>
 	constexpr execute& bind(const std::tuple<Ty1&...>& in, const std::tuple<Ty2&...>& out)
 	{	
-		const auto& memory_mng = frame<terminal::client>::get().memory_mng();
-		std::size_t size{0};
-
-		this->counter = [&]() {	};
+		this->counter = [&,in]() {
+			seriliasize_buffer seriliasizer;
+			std::apply([&](auto&&... args) { ((seriliasizer & std::forward<decltype(args)>(args)), ...); }, in);
+			return seriliasizer.size();
+		};
 		
-		this->writer = [&, in]() { 
-			seriliasize seriliasizer(nullptr, size);
+		this->writer = [&, in](malloc_fn_concept auto&& malloc) {
+			seriliasize_buffer seriliasizer( malloc() );
 			std::apply([&](auto&&... args) { ((seriliasizer << std::forward<decltype(args)>(args)), ...); }, in);
 		};
-		this->reader = [&, out]()  mutable {
-			seriliasize seriliasizer(nullptr, size);
+
+		this->reader = [&, out](const char* addr, size_t size)  mutable {
+			seriliasize_buffer seriliasizer(addr, size);
 			std::apply([&](auto&&... args) { ((seriliasizer >> std::forward<decltype(args)>(args)), ...); }, in);
 		};
+
 		return *this;
 	}
 
 	constexpr execute& write() {
-		std::invoke(this->writer);
+		auto size = std::invoke(this->counter);
+		std::invoke(this->writer, [size]() { return frame<terminal::client>::get().memory_mng().malloc(size); });
 		return *this;
 	}
 
@@ -402,16 +405,16 @@ public:
 
 	constexpr execute& read() {
 		
-		std::invoke(this->reader);
+		std::invoke(this->reader, nullptr, 0);
 		return *this;
 	}
 
 private:
 	const char* name;
 	const std::size_t name_len;
-	fn counter;
-	fn writer;
-	fn reader;
+	count_fn counter;
+	write_fn writer;
+	read_fn reader;
 };
 
 
