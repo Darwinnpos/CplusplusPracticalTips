@@ -3,13 +3,39 @@
 #include <functional>
 #include <type_traits>
 #include <tuple>
-#include <concepts>
-#include <optional>
+
+
 #include <queue>
 
-//#include <boost\lockfree\queue.hpp>
 
+#if defined(_MSC_VER)
+// 使用 MSVC 编译器
+#if _MSVC_LANG >= 202002L
+#define CPP20_SUPPORTED
+#elif _MSVC_LANG >= 201703L
+#define CPP17_SUPPORTED
+#elif _MSVC_LANG >= 201402L
+#define CPP14_SUPPORTED
+#elif _MSVC_LANG >= 201103L
+#define CPP11_SUPPORTED
+#endif
+#elif defined(__GNUC__)
+// 使用 GNU 编译器
+#if __cplusplus >= 202002L
+#define CPP20_SUPPORTED
+#elif __cplusplus >= 201703L
+#define CPP17_SUPPORTED
+#elif __cplusplus >= 201402L
+#define CPP14_SUPPORTED
+#elif __cplusplus >= 201103L
+#define CPP11_SUPPORTED
+#endif
+#endif
 
+// 不同C++版本的实现
+
+#if defined(CPP20_SUPPORTED)
+#include <concepts>
 
 template<typename T>
 struct input_t { T& t; };
@@ -68,10 +94,135 @@ struct is_instance_of_t<U, U<Ty...>> : std::true_type {};
 template<template<typename> class U, typename... Ty>
 inline constexpr bool is_instance_of_v = is_instance_of_t<U, Ty...>::value;
 
+template<typename T>
+concept input_concept = is_input_t<std::decay_t<T>>::value;
+
+template<typename T>
+concept output_concept = is_output_t<std::decay_t<T>>::value;
+
+template<typename... T>
+concept multi_input_concept = is_multi_input_t<multi_input_t<T...>>::value;
+
+template<typename... T>
+concept multi_output_concept = is_multi_output_t<multi_output_t<T...>>::value;
+
 template<typename... Ty>
-concept wrapper = is_instance_of_v<input_t, Ty...> || is_instance_of_v<output_t, Ty...>
+concept wrapper_concept = is_instance_of_v<input_t, Ty...> || is_instance_of_v<output_t, Ty...>
 || is_instance_of_v<multi_input_t, Ty...> || is_instance_of_v<multi_output_t, Ty...>;
 
+
+#elif defined(CPP17_SUPPORTED) || defined(CPP14_SUPPORTED) || defined(CPP11_SUPPORTED)
+
+template<typename T>
+struct input_t { T& t; };
+
+template<typename T>
+struct is_input_t : std::false_type {};
+
+template<typename Ty>
+struct is_input_t<input_t<Ty>> : std::true_type {};
+
+template<typename T>
+constexpr bool is_input_v = is_input_t<T>::value;
+
+template<typename T>
+struct output_t { T& t; };
+
+template<typename T>
+struct is_output_t : std::false_type {};
+
+template<typename Ty>
+struct is_output_t<output_t<Ty>> : std::true_type {};
+
+template<typename T>
+constexpr bool is_output_v = is_output_t<T>::value;
+
+template<typename... Ty>
+struct multi_input_t { std::tuple<Ty&...> t; };
+
+template<typename T>
+struct is_multi_input_t : std::false_type {};
+
+template<typename... Ty>
+struct is_multi_input_t<multi_input_t<Ty...>> : std::true_type {};
+
+template<typename T>
+constexpr bool is_multi_input_v = is_multi_input_t<T>::value;
+
+template<typename... Ty>
+struct multi_output_t { std::tuple<Ty&...> t; };
+
+template<typename T>
+struct is_multi_output_t : std::false_type {};
+
+template<typename... Ty>
+struct is_multi_output_t<multi_output_t<Ty...>> : std::true_type {};
+
+template<typename T>
+constexpr bool is_multi_output_v = is_multi_output_t<T>::value;
+
+template<template<typename> class U, typename T>
+struct is_instance_of_t : std::false_type {};
+
+template<template<typename> class U, typename... Ty>
+struct is_instance_of_t<U, U<Ty...>> : std::true_type {};
+
+template<template<typename> class U, typename T>
+constexpr bool is_instance_of_v = is_instance_of_t<U, T>::value;
+
+#endif
+
+#if defined(CPP17_SUPPORTED)
+
+template<typename... T>
+struct is_wrapper_t : std::disjunction<
+	std::integral_constant<bool, is_input_v<T> || is_output_v<T> || is_multi_input_v<T> || is_multi_output_v<T>>...> {};
+
+template<typename... T>
+constexpr bool is_wrapper_v = is_wrapper_t<T...>::value;
+
+template<typename... T>
+using wrapper = std::enable_if_t<is_wrapper_v<T...>, bool>;
+
+#elif defined(CPP14_SUPPORTED)
+
+template<typename T>
+struct is_wrapper_element : std::integral_constant<bool,
+	is_input_v<T> || is_output_v<T> || is_multi_input_v<T> || is_multi_output_v<T>> {};
+
+template<typename... T>
+struct is_wrapper_t : std::false_type {};
+
+template<typename... T>
+struct is_wrapper_t<std::tuple<T...>> : std::integral_constant<bool,
+	is_wrapper_element<T>::value && ...> {};
+
+template<typename... T>
+constexpr bool is_wrapper_v = is_wrapper_t<T...>::value;
+
+template<typename... T>
+using wrapper = std::enable_if_t<is_wrapper_v<T...>, bool>;
+
+#elif defined(CPP11_SUPPORTED)
+
+template<typename T>
+struct is_wrapper_element : std::integral_constant<bool,
+	is_input_v<T> || is_output_v<T> || is_multi_input_v<T> || is_multi_output_v<T>> {};
+
+template<typename... T>
+struct is_wrapper_t : std::false_type {};
+
+template<typename... T>
+struct is_wrapper_t<std::tuple<T...>> : std::integral_constant<bool,
+	is_wrapper_element<T>::value && ...> {};
+
+template<typename... T>
+constexpr bool is_wrapper_v = is_wrapper_t<T...>::value;
+
+template<typename... T>
+using wrapper = typename std::enable_if<is_wrapper_v<T...>, bool>::type;
+
+#endif
 
 class yas
 {
@@ -83,7 +234,7 @@ public:
 	template<typename ...Ts>
 	static void save(char* addr, const std::tuple<Ts...>& theTuple) {
 		//TODO 等待添加yas后完善
-		std::apply([](const Ts&... args) {}, theTuple);
+		//std::apply([](const Ts&... args) {}, theTuple);
 	}
 	template<typename ...Ts>
 	static void load(char*, size_t size, const std::tuple<Ts...>& theTuple) {
@@ -112,11 +263,10 @@ struct memory_info
 	size_t index;
 };
 
-template<typename T>
-concept malloc_param = std::is_same_v<T, uint32_t>; /*|| requires(T t) {
-	{ t() } -> std::convertible_to<uint32_t>;}*/
 
-// 链式调用
+#if defined(CPP20_SUPPORTED) || defined(CPP17_SUPPORTED)
+
+#include <optional>
 class malloc_manager
 {
 public:
@@ -134,16 +284,49 @@ public:
 		if (const auto ptr_and_mem_info = malloc_inner(size); std::get<0>(ptr_and_mem_info)){
 			return ptr_and_mem_info;
 		}
-		if (next.has_value())
+		if (next)
 			return next.value().get().malloc(size);
-		return {};
+		return { nullptr,{ {},{} } };
 	};
 
 protected:
+
 	std::optional<std::reference_wrapper<malloc_manager>> next;
-	inline static thread_local memory_info mem_info;
+	inline static thread_local memory_info mem_info;	
+};
+#else
+
+class malloc_manager
+{
+public:
+	virtual std::tuple<char*, memory_info> malloc_inner(size_t size) = 0;
+
+	virtual malloc_manager& set_next(malloc_manager& _next) {
+		next.reset(&_next);
+		return *this;
+	}
+
+	memory_info get_tls_info() { return mem_info; }
+
+	std::tuple<char*, memory_info> malloc(size_t size)
+	{
+		auto ptr_and_mem_info = malloc_inner(size);
+		if (std::get<0>(ptr_and_mem_info)) {
+			return ptr_and_mem_info;
+		}
+		if (next) {
+			return next->malloc(size);
+		}
+		return std::make_tuple(nullptr, memory_info{});
+	}
+
+protected:
+	std::unique_ptr<malloc_manager> next;
+	static thread_local memory_info mem_info;
 };
 
+thread_local memory_info malloc_manager::mem_info;
+#endif
 
 class semaphore
 {
@@ -230,15 +413,10 @@ private:
 };
 
 
-
-
-
 class managered_memory : public malloc_manager
 {
 public:
 	std::tuple<char*, memory_info> malloc_inner(size_t size) {
-
-
 		return { nullptr,{} };
 	}
 };
@@ -252,10 +430,6 @@ public:
 	}
 };
 
-
-
-
-
 template<terminal Terminal>
 class shared_memory
 {
@@ -268,10 +442,17 @@ public:
 	}
 
 
-	char* malloc(size_t size) {		
+	char* malloc(size_t size) {	
+
+#if defined(CPP20_SUPPORTED) || defined(CPP17_SUPPORTED)
 		auto [ptr, mem_info] =  entrance.malloc(size);
+#else
+		auto ret = entrance.malloc(size);
+		auto ptr = std::get<0>(ret);
+		auto mem_info = std::get<1>(ret);
+#endif
 		// 将信息写入共享内存
-		first.
+		//first.
 		return ptr;
 	}
 
@@ -343,14 +524,7 @@ private:
 	const std::size_t len;
 };
 
-
 class params;
-
-
-template<typename T>
-concept malloc_fn_concept = requires (T t) {
-	{ t() } -> std::same_as<char*>;
-};
 
 template<size_t N>
 class execute
@@ -368,7 +542,7 @@ public:
 	{
 
 	}
-
+#if defined(CPP20_SUPPORTED) || defined(CPP17_SUPPORTED) 
 	template<typename... Ty1,typename... Ty2>
 	constexpr execute& bind(const std::tuple<Ty1&...>& in, const std::tuple<Ty2&...>& out)
 	{	
@@ -378,7 +552,7 @@ public:
 			return seriliasizer.size();
 		};
 		
-		this->writer = [&, in](malloc_fn_concept auto&& malloc) {
+		this->writer = [&, in](malloc_fn&& malloc) {
 			seriliasize_buffer seriliasizer( malloc() );
 			std::apply([&](auto&&... args) { ((seriliasizer << std::forward<decltype(args)>(args)), ...); }, in);
 		};
@@ -390,6 +564,93 @@ public:
 
 		return *this;
 	}
+
+#elif defined(CPP14_SUPPORTED) 
+	template<typename Tuple, typename Func, std::size_t... I>
+	void tuple_for_each_impl(Tuple&& t, Func&& f, std::index_sequence<I...>)
+	{
+		using expander = int[];
+		(void)expander {
+			0, (void(f(std::get<I>(std::forward<Tuple>(t)))), 0)...
+		};
+	}
+
+	template<typename Tuple, typename Func>
+	void tuple_for_each(Tuple&& t, Func&& f)
+	{
+		constexpr auto size = std::tuple_size<typename std::decay<Tuple>::type>::value;
+		tuple_for_each_impl(std::forward<Tuple>(t), std::forward<Func>(f), std::make_index_sequence<size>{});
+	}
+
+	template<typename... Ty1, typename... Ty2>
+	execute& bind(const std::tuple<Ty1&...>& in, const std::tuple<Ty2&...>& out)
+	{
+		this->counter = [&, in]() {
+			seriliasize_buffer seriliasizer;
+			tuple_for_each(in, [&](auto&& arg) { seriliasizer& std::forward<decltype(arg)>(arg); });
+			return seriliasizer.size();
+			};
+
+		this->writer = [&, in](malloc_fn&& malloc) {
+			seriliasize_buffer seriliasizer(malloc());
+			tuple_for_each(in, [&](auto&& arg) { seriliasizer << std::forward<decltype(arg)>(arg); });
+			};
+
+		this->reader = [&, out](const char* addr, size_t size) mutable {
+			seriliasize_buffer seriliasizer(addr, size);
+			tuple_for_each(out, [&](auto&& arg) { seriliasizer >> std::forward<decltype(arg)>(arg); });
+			};
+
+		return *this;
+	}
+#elif defined(CPP11_SUPPORTED) 
+	template<std::size_t...>
+	struct index_sequence {};
+
+	template<std::size_t N, std::size_t... Is>
+	struct make_index_sequence : make_index_sequence<N - 1, N - 1, Is...> {};
+
+	template<std::size_t... Is>
+	struct make_index_sequence<0, Is...> : index_sequence<Is...> {};
+
+	template<typename Tuple, typename Func, std::size_t... I>
+	void tuple_for_each_impl(Tuple&& t, Func&& f, index_sequence<I...>)
+	{
+		using expander = int[];
+		(void)expander {
+			0, (void(f(std::get<I>(std::forward<Tuple>(t)))), 0)...
+		};
+	}
+
+	template<typename Tuple, typename Func>
+	void tuple_for_each(Tuple&& t, Func&& f)
+	{
+		const std::size_t size = std::tuple_size<typename std::decay<Tuple>::type>::value;
+		tuple_for_each_impl(std::forward<Tuple>(t), std::forward<Func>(f), make_index_sequence<size>{});
+	}
+
+	template<typename... Ty1, typename... Ty2>
+	execute& bind(const std::tuple<Ty1&...>& in, const std::tuple<Ty2&...>& out)
+	{
+		this->counter = [&, in]() {
+			seriliasize_buffer seriliasizer;
+			tuple_for_each(in, [&](auto&& arg) { seriliasizer& std::forward<decltype(arg)>(arg); });
+			return seriliasizer.size();
+			};
+
+		this->writer = [&, in](malloc_fn&& malloc) {
+			seriliasize_buffer seriliasizer(malloc());
+			tuple_for_each(in, [&](auto&& arg) { seriliasizer << std::forward<decltype(arg)>(arg); });
+			};
+
+		this->reader = [&, out](const char* addr, size_t size) mutable {
+			seriliasize_buffer seriliasizer(addr, size);
+			tuple_for_each(out, [&](auto&& arg) { seriliasizer >> std::forward<decltype(arg)>(arg); });
+			};
+
+		return *this;
+	}
+#endif
 
 	constexpr execute& write() {
 		auto size = std::invoke(this->counter);
@@ -418,40 +679,33 @@ private:
 };
 
 
+
 class params {
 
 public:
-
-	template<wrapper First, wrapper... Rest>
+#if defined(CPP20_SUPPORTED)
+	template<wrapper_concept First, wrapper_concept... Rest>
 	static constexpr auto sort(First&& first, Rest&&... rest) -> decltype(auto)
 	{
 		auto rest_result = sort(std::forward<Rest>(rest)...);
-
-		if constexpr (is_input_t<First>::value) {
-			return handle_input(std::forward<First>(first), std::forward<decltype(rest_result)>(rest_result));
-		}
-		else if constexpr (is_output_t<First>::value) {
-			return handle_output(std::forward<First>(first), std::forward<decltype(rest_result)>(rest_result));
-		}
-		else if constexpr (is_multi_input_t<First>::value) {
-			return handle_multi_input(std::forward<First>(first), std::forward<decltype(rest_result)>(rest_result));
-		}
-		else if constexpr (is_multi_output_t<First>::value) {
-			return handle_multi_output(std::forward<First>(first), std::forward<decltype(rest_result)>(rest_result));
-		}
-		else {
-			return handle_default(std::forward<decltype(rest_result)>(rest_result));
-		}
+		return sort_impl(std::forward<First>(first), std::forward<decltype(rest_result)>(rest_result));
 	}
-
+#elif defined(CPP17_SUPPORTED) || defined(CPP14_SUPPORTED) || defined(CPP11_SUPPORTED)
+	template<typename First, typename... Rest, wrapper<First> = 0>
+	static auto sort(First&& first, Rest&&... rest) -> decltype(auto) {
+		auto rest_result = sort(std::forward<Rest>(rest)...);
+		return sort_impl(std::forward<First>(first), std::forward<decltype(rest_result)>(rest_result));
+	}
+#endif
 private:
+#if defined(CPP20_SUPPORTED)
 	static constexpr auto sort() -> std::tuple<std::tuple<>, std::tuple<>>
 	{
 		return std::tuple<std::tuple<>, std::tuple<>>();
 	}
 
-	template<typename First, typename RestResult>
-	static constexpr auto handle_input(First&& first, RestResult&& rest_result)
+	template<input_concept First, typename RestResult>
+	static constexpr auto sort_impl(First&& first, RestResult&& rest_result)
 		-> decltype(auto)
 	{
 		return std::tuple_cat(
@@ -460,8 +714,8 @@ private:
 		);
 	}
 
-	template<typename First, typename RestResult>
-	static constexpr auto handle_output(First&& first, RestResult&& rest_result)
+	template<output_concept First, typename RestResult>
+	static constexpr auto sort_impl(First&& first, RestResult&& rest_result)
 		-> decltype(auto)
 	{
 		return std::tuple_cat(
@@ -470,8 +724,8 @@ private:
 		);
 	}
 
-	template<typename First, typename RestResult>
-	static constexpr auto handle_multi_input(First&& first, RestResult&& rest_result)
+	template<multi_input_concept First, typename RestResult>
+	static constexpr auto sort_impl(First&& first, RestResult&& rest_result)
 		-> decltype(auto)
 	{
 		return std::tuple_cat(
@@ -480,8 +734,8 @@ private:
 		);
 	}
 
-	template<typename First, typename RestResult>
-	static constexpr auto handle_multi_output(First&& first, RestResult&& rest_result)
+	template<multi_output_concept First, typename RestResult>
+	static constexpr auto sort_impl(First&& first, RestResult&& rest_result)
 		-> decltype(auto)
 	{
 		return std::tuple_cat(
@@ -499,10 +753,55 @@ private:
 			std::make_tuple(std::get<1>(rest_result))
 		);
 	}
+#elif defined(CPP17_SUPPORTED) || defined(CPP14_SUPPORTED) || defined(CPP11_SUPPORTED)
+	static auto sort() -> std::tuple<std::tuple<>, std::tuple<>> {
+		return std::tuple<std::tuple<>, std::tuple<>>();
+	}
+	template<typename First, typename RestResult, typename std::enable_if<is_input_t<First>::value, int>::type = 0>
+	static auto sort_impl(First&& first, RestResult&& rest_result) -> decltype(auto) {
+		return std::tuple_cat(
+			std::make_tuple(std::tuple_cat(std::tie(first.t), std::get<0>(rest_result))),
+			std::make_tuple(std::get<1>(rest_result))
+		);
+	}
+	template<typename First, typename RestResult, typename std::enable_if<is_output_t<First>::value, int>::type = 0>
+	static auto sort_impl(First&& first, RestResult&& rest_result) -> decltype(auto) {
+		return std::tuple_cat(
+			std::make_tuple(std::get<0>(rest_result)),
+			std::make_tuple(std::tuple_cat(std::tie(first.t), std::get<1>(rest_result)))
+		);
+	}
+	template<typename First, typename RestResult, typename std::enable_if<is_multi_input_t<First>::value, int>::type = 0>
+	static auto sort_impl(First&& first, RestResult&& rest_result) -> decltype(auto) {
+		return std::tuple_cat(
+			std::make_tuple(std::tuple_cat(first.t, std::get<0>(rest_result))),
+			std::make_tuple(std::get<1>(rest_result))
+		);
+	}
+
+	template<typename First, typename RestResult, typename std::enable_if<is_multi_output_t<First>::value, int>::type = 0>
+	static auto sort_impl(First&& first, RestResult&& rest_result) -> decltype(auto) {
+		return std::tuple_cat(
+			std::make_tuple(std::get<0>(rest_result)),
+			std::make_tuple(std::tuple_cat(first.t, std::get<1>(rest_result)))
+		);
+	}
+
+	template<typename First, typename RestResult, typename std::enable_if<!is_input_t<First>::value && !is_output_t<First>::value &&
+		!is_multi_input_t<First>::value && !is_multi_output_t<First>::value, int>::type = 0>
+	static auto sort_impl(First&& first, RestResult&& rest_result) -> decltype(auto) {
+		return std::tuple_cat(
+			std::make_tuple(std::get<0>(rest_result)),
+			std::make_tuple(std::get<1>(rest_result))
+		);
+	}
+
+#endif
 };
 
+#if defined(CPP20_SUPPORTED) 
 template <typename First, typename... Rest>
-constexpr auto input(First& first, Rest&... rests)
+constexpr auto input(First&& first, Rest&&... rests)
 -> decltype(auto)
 {
 	if constexpr (sizeof...(rests) == 0) {
@@ -512,8 +811,41 @@ constexpr auto input(First& first, Rest&... rests)
 		return multi_input_t(std::tie(first, rests...));
 	}
 }
+#elif defined(CPP17_SUPPORTED) 
 
+template <typename... Args>
+auto input(Args&&... args) {
+	if constexpr (sizeof...(Args) == 1) {
+		return input_t<std::decay_t<Args>...>{ std::forward<Args>(args)... };
+	}
+	else {
+		return multi_input_t<std::decay_t<Args>...>{ std::tie(args...) };
+	}
+}
 
+#elif defined(CPP14_SUPPORTED) || defined(CPP11_SUPPORTED)
+template <typename First, typename... Rest>
+struct input_helper {
+	static auto create(First& first, Rest&... rests)
+		-> multi_input_t<First, Rest...> {
+		return { std::tie(first, rests...) };
+	}
+};
+
+template <typename First>
+struct input_helper<First> {
+	static auto create(First&& first) -> input_t<First> {
+		return { first };
+	}
+};
+
+template <typename First, typename... Rest>
+auto input(First&& first, Rest&&... rests)
+-> decltype(input_helper<First, Rest...>::create(first, rests...)) {
+	return input_helper<First, Rest...>::create(first, rests...);
+}
+#endif
+#ifdef CPP20_SUPPORTED
 template <typename First, typename... Rest>
 constexpr auto output(First& first, Rest&... rests)
 -> decltype(auto)
@@ -525,6 +857,38 @@ constexpr auto output(First& first, Rest&... rests)
 		return multi_output_t(std::tie(first, rests...));
 	}
 }
+#elif defined(CPP17_SUPPORTED) 
+
+template <typename... Args>
+auto output(Args&&... args) {
+	if constexpr (sizeof...(Args) == 1) {
+		return output_t<std::decay_t<Args>...>{ std::forward<Args>(args)... };
+	}
+	else {
+		return multi_output_t<std::decay_t<Args>...>{ std::tie(args...) };
+	}
+}
+
+#elif defined(CPP14_SUPPORTED) || defined(CPP11_SUPPORTED)
+template <typename First, typename... Rest>
+struct output_helper {
+	static auto create(First& first, Rest&... rests)
+		-> multi_output_t<First, Rest...> {
+		return { std::tie(first, rests...) };
+	}
+};
+template <typename First>
+struct output_helper<First> {
+	static auto create(First& first) -> output_t<First> {
+		return { first };
+	}
+};
+template <typename First, typename... Rest>
+auto output(First& first, Rest&... rests)
+-> decltype(output_helper<First, Rest...>::create(first, rests...)) {
+	return output_helper<First, Rest...>::create(first, rests...);
+}
+#endif
 
 enum class level : uint32_t {
 	disable,
@@ -595,20 +959,28 @@ trace global_config;
 class rpc
 {
 public:
-	template<size_t N, wrapper... Args>
+#if defined(CPP20_SUPPORTED)
+	template<size_t N, wrapper_concept... Args>
 	static constexpr void call(const char(&name)[N], Args&&... args)
 	{
 		thread_local execute<N> executer(name);
 		const auto [in, out] = params::sort(std::forward<Args>(args)...);
 		executer.bind(in, out).write().wait_result().read();
 	}
-
+#elif defined(CPP17_SUPPORTED) || defined(CPP14_SUPPORTED) || defined(CPP11_SUPPORTED)
+	template<size_t N, typename... Args>
+	typename std::enable_if<is_wrapper_v<Args...>, void>::type
+		static call(const char(&name)[N], Args&&... args) {
+		thread_local execute<N> executer(name);
+		const auto [in, out] = params::sort(std::forward<Args>(args)...);
+		executer.bind(in, out).write().wait_result().read();
+	}
+#endif
 	static trace& config()
 	{
 		return global_config;
 	}
 };
-
 
 
 int main()
@@ -624,7 +996,7 @@ int main()
 	rpc::config().log_detaile(); // 详细日志
 	rpc::config().trace_detaile(); // 详细追踪
 
-	rpc::call("name", input(a, b), output(c), output(d, e), input(f)); // 发起调用
+	rpc::call("name", input(1, b), output(c), output(d, e), input(f)); // 发起调用
 
 	rpc::call("name", input(a, b), output(c), output(d, e), input(f)); // 发起调用
 
